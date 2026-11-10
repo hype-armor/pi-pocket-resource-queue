@@ -1,0 +1,26 @@
+/* Use a plain dot, not the rail's count badge and its bubble. Scope to this button only. */
+[data-part~="rail-button"][title^="Resource monitor —"] {
+  position: relative;
+}
+[data-part~="rail-button"][title^="Resource monitor —"]::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  border: 0;
+  box-shadow: none;
+  pointer-events: none;
+}
+[data-part~="rail-button"][title^="Resource monitor — Ready"]::after {
+  background: var(--ok);
+}
+[data-part~="rail-button"][title^="Resource monitor — Paused"]::after {
+  background: var(--err);
+}
+[data-part~="rail-button"][title^="Resource monitor — Recovery"]::after {
+  background: var(--warn);
+}

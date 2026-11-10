@@ -1,0 +1,21 @@
+{
+  "name": "pi-pocket-resource-queue",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/unit.test.ts",
+    "test:integration": "node --test test/integration.test.ts test/reload.test.ts",
+    "check": "tsc --noEmit && node --check resource-queue/index.js",
+    "format:check": "prettier --check resource-queue.ts resource-queue test scripts .github README.md CLAUDE.md package.json package-lock.json tsconfig.json",
+    "format": "prettier --write resource-queue.ts resource-queue test scripts .github README.md CLAUDE.md package.json package-lock.json tsconfig.json"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "^1.4.0",
+    "@earendil-works/pi-durable": "^1.4.0",
+    "@types/node": "^24.0.0",
+    "prettier": "^3.6.0",
+    "typescript": "^5.9.0"
+  }
+}

@@ -1,0 +1,4 @@
+node_modules/
+_pocket.d.ts
+coverage/
+pocket/

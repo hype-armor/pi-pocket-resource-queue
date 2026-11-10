@@ -1,0 +1,47 @@
+.rq-process-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.rq-process-group {
+  min-width: 0;
+}
+.rq-process-group h2 {
+  font-size: 1rem;
+  margin: 8px 0;
+}
+.rq-process-list {
+  padding: 0;
+  margin: 12px 0;
+  list-style: none;
+}
+.rq-process-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.rq-process-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rq-process-name small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-top: 3px;
+}
+.rq-process-list strong {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+}
+@media (max-width: 700px) {
+  .rq-process-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
