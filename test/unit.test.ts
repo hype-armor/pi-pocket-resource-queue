@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import os, { tmpdir } from "node:os";
+import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import createExtension from "../resource-queue.ts";
 import { createResumeGate } from "../resource-queue/lib/resume-gate.ts";
@@ -158,7 +159,14 @@ test("overlapping reload generations share their reservation", () => {
 });
 
 test("held calls show counts, cancel cleanly, and stop on disposal", async (t) => {
+  const memory = t.mock.method(os, "freemem", () => 0);
+  syncBuiltinESMExports();
+  t.after(() => {
+    memory.mock.restore();
+    syncBuiltinESMExports();
+  });
   const f = await fixture(t);
+  f.values.minFreeMemoryPercent = 95;
   const before = f.extension.hooks![0].handlers.beforeTool!;
   const ctl = new AbortController();
   const held = before(
@@ -183,6 +191,61 @@ test("held calls show counts, cancel cleanly, and stop on disposal", async (t) =
     {} as any,
     f.context as any,
   );
+});
+
+test("healthy follow-up calls do not join or extend recovery", async (t) => {
+  const memory = t.mock.method(os, "freemem", () => 0);
+  syncBuiltinESMExports();
+  t.after(() => {
+    memory.mock.restore();
+    syncBuiltinESMExports();
+  });
+  const f = await fixture(t);
+  const before = f.extension.hooks![0].handlers.beforeTool!;
+  // Even an active startup clock is not a reason to hold healthy work.
+  assert.ok(f.gate.remainingMs() > 0);
+  await before(
+    { name: "read", arguments: {} } as any,
+    { conversationId: 1 } as any,
+    f.context as any,
+  );
+  assert.equal(f.notices.length, 0);
+  f.values.minFreeMemoryPercent = 95;
+  const ctl = new AbortController();
+  const held = before(
+    { name: "read", arguments: {} } as any,
+    { conversationId: 1 } as any,
+    { abortSignal: ctl.signal } as any,
+  );
+  assert.equal(f.status().waiting.length, 1);
+  f.values.minFreeMemoryPercent = 0;
+  for (let i = 0; i < 3; i++)
+    await before(
+      { name: "read", arguments: {} } as any,
+      { conversationId: 2 } as any,
+      f.context as any,
+    );
+  assert.equal(
+    f.status().waiting.length,
+    1,
+    "Healthy calls must not join the old waiting call",
+  );
+  ctl.abort(new Error("stopped"));
+  await assert.rejects(held as Promise<any>, /stopped/);
+});
+
+test("unknown I/O and disk readings do not exceed thresholds", async (t) => {
+  const f = await fixture(t);
+  f.values.maxIoWaitPercent = 15;
+  f.values.minFreeDiskPercent = 10;
+  const reading = f.status();
+  assert.equal(reading.ioWaitPercent, null);
+  assert.equal(reading.checks.find((check: any) => check.id === "io").ok, true);
+  assert.equal(
+    reading.checks.find((check: any) => check.id === "disk").ok,
+    true,
+  );
+  assert.equal(reading.ready, true);
 });
 
 test("enqueue is idempotent and cancellation is scoped to its conversation", async (t) => {
@@ -274,6 +337,17 @@ test("rail dot follows ready, paused, and recovery states without a bubble", () 
   });
   assert.match(rail.title, /Paused.*CPU load/);
   statusEvent({ ready: true, checks: [], waiting: [], resumeDelaySeconds: 12 });
+  assert.match(
+    rail.title,
+    /Ready/,
+    "An idle recovery clock must not imply paused work",
+  );
+  statusEvent({
+    ready: true,
+    checks: [],
+    waiting: [{ conversationId: 1, count: 1 }],
+    resumeDelaySeconds: 12,
+  });
   assert.match(rail.title, /Recovery/);
   assert.equal(rail.badge, null);
 });

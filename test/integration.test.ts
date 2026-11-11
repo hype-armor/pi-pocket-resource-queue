@@ -315,7 +315,12 @@ test(
     );
     const id = await newSession(app);
     await loadTools(app, id, "read");
+    const started = Date.now();
     await say(app, id, "Read the isolated input.");
+    assert.ok(
+      Date.now() - started < 5000,
+      "A healthy call must bypass the recovery cooldown.",
+    );
     assert.equal(results, 1);
     assert.match(
       (await modelTexts(app, id)).at(-1) ?? "",

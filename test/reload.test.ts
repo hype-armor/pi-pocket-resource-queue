@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { copyFileSync, cpSync, mkdirSync, mkdtempSync } from "node:fs";
 import { createServer } from "node:http";
+import os from "node:os";
+import { syncBuiltinESMExports } from "node:module";
 import { join, resolve } from "node:path";
 import { after, test } from "node:test";
 import { pathToFileURL } from "node:url";
@@ -22,6 +24,12 @@ test(
   "real root reload preserves reservations across overlapping module lifetimes",
   { timeout: 20000 },
   async (t) => {
+    const memory = t.mock.method(os, "freemem", () => 0);
+    syncBuiltinESMExports();
+    t.after(() => {
+      memory.mock.restore();
+      syncBuiltinESMExports();
+    });
     const file = "resource-queue.ts";
     const dataDir = mkdtempSync(join(root, "resource-queue-reload-"));
     const extensions = join(dataDir, "extensions");
@@ -47,7 +55,7 @@ test(
     t.after(() => app.close());
     await app.setExtensionEnabled(owner(app), file, true);
     app.setExtensionSettings(owner(app), "resource-queue", {
-      minFreeMemoryPercent: 0,
+      minFreeMemoryPercent: 95,
       maxLoadPerCpu: 0,
       maxIoWaitPercent: 0,
       minFreeDiskPercent: 0,
@@ -134,6 +142,14 @@ test(
       undefined,
     );
 
+    app.setExtensionSettings(owner(app), "resource-queue", {
+      minFreeMemoryPercent: 0,
+      maxLoadPerCpu: 0,
+      maxIoWaitPercent: 0,
+      minFreeDiskPercent: 0,
+      pollSeconds: 5,
+      resumeSpacingSeconds: 15,
+    });
     const reading = await status();
     assert.equal(reading.resumeDelaySeconds, 13);
     assert.deepEqual(reading.waiting, []);

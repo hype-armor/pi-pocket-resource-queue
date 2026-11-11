@@ -257,7 +257,7 @@ export default function setup(pocket) {
       .filter((item) => item.enabled && !item.ok)
       .map((item) => item.reason);
     const summary = reading.ready
-      ? "All enabled resource checks are within their limits."
+      ? "No measured resource limits are exceeded."
       : `Pi's tool calls and queued starts wait while ${blocking.join(" and ")}.`;
 
     const metrics = [
@@ -306,7 +306,7 @@ export default function setup(pocket) {
         meterLabel: ioKnown
           ? `${ioWait.toFixed(1)} percent I/O wait; limit ${limits.maxIoWaitPercent} percent`
           : "I/O wait is not available yet",
-        level: levelFor("io", check("io")?.ok),
+        level: ioKnown ? levelFor("io", check("io")?.ok) : "muted",
         footLeft: "5-second sample",
         footRight: !reading.ioWaitSupported
           ? "Not available"
@@ -327,7 +327,7 @@ export default function setup(pocket) {
         meterLabel: diskKnown
           ? `${diskFree.toFixed(1)} percent data-disk space free`
           : "Data-disk capacity is not available yet",
-        level: levelFor("disk", check("disk")?.ok),
+        level: diskKnown ? levelFor("disk", check("disk")?.ok) : "muted",
         footLeft: "Pi Pocket data path",
         footRight: !reading.diskSupported
           ? "Not available"
@@ -485,9 +485,7 @@ export default function setup(pocket) {
     const update = (reading) => {
       latest = reading;
       item?.update(renderStatus(reading));
-      const recovering =
-        reading.ready &&
-        ((reading.waiting ?? []).length > 0 || reading.resumeDelaySeconds > 0);
+      const recovering = reading.ready && (reading.waiting ?? []).length > 0;
       const state = !reading.ready
         ? "Paused"
         : recovering

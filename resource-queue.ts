@@ -135,7 +135,7 @@ export type Check = {
 
 /**
  * The one set of rules. The queue, the tool-call hold, and the monitor all use it.
- * Enabled supported checks wait for initial measurements after load or reload.
+ * Unknown measurements are not evidence that a resource limit is exceeded.
  */
 function checksFor(
   limits: Limits,
@@ -164,8 +164,8 @@ function checksFor(
       enabled: io,
       ok:
         !io ||
-        (sampled.ioWaitPercent !== null &&
-          sampled.ioWaitPercent <= limits.maxIoWaitPercent),
+        sampled.ioWaitPercent === null ||
+        sampled.ioWaitPercent <= limits.maxIoWaitPercent,
       reason:
         sampled.ioWaitPercent === null
           ? "I/O wait is being measured"
@@ -176,8 +176,8 @@ function checksFor(
       enabled: disk,
       ok:
         !disk ||
-        (sampled.disk !== undefined &&
-          sampled.disk.freePercent >= limits.minFreeDiskPercent),
+        sampled.disk === undefined ||
+        sampled.disk.freePercent >= limits.minFreeDiskPercent,
       reason:
         sampled.disk === undefined
           ? "data-disk space is being measured"
@@ -283,8 +283,9 @@ function createPauseHook(
         ? AbortSignal.any([context.abortSignal, lifetime])
         : lifetime;
       if (signal.aborted) throw signal.reason ?? new Error("Aborted");
-      if (getStatus().ready && gate.remainingMs() === 0 && waiting.size === 0)
-        return undefined;
+      // Only calls that actually encounter resource pressure join recovery.
+      // Healthy follow-up calls must not prolong the recovery queue.
+      if (getStatus().ready) return undefined;
       const id = api.conversationId;
       const count = waiting.get(id) ?? 0;
       waiting.set(id, count + 1);
