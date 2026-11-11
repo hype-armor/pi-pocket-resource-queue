@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: TannerMidd/pi-pocket
-          ref: v0.27.0
+          ref: v0.22.0
           path: pocket
       - run: npm ci --ignore-scripts
       - run: ln -s pocket/types/pocket.d.ts _pocket.d.ts
@@ -25,8 +25,11 @@ jobs:
       - run: npm run format:check
       - run: npm test
   integration:
-    name: Isolated Pi Pocket integration
+    name: Isolated Pi Pocket ${{ matrix.pocket }} integration
     needs: fast
+    strategy:
+      matrix:
+        pocket: [v0.22.0, v0.27.0]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +40,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: TannerMidd/pi-pocket
-          ref: v0.27.0
+          ref: ${{ matrix.pocket }}
           path: pocket
       - run: npm ci --ignore-scripts
       - run: npm ci --ignore-scripts

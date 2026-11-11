@@ -39,11 +39,12 @@ const entry = {
   description,
   tags: ["resources", "monitoring", "queue", "linux"],
   author: { name: "hype-armor", github: "hype-armor" },
-  version: "1.0.0",
+  version: JSON.parse(await readFile(new URL("package.json", root), "utf8"))
+    .version,
   source: { repo: "hype-armor/pi-pocket-resource-queue", commit },
   files,
   pocketApi: 2,
-  minPocket: "0.27.0",
+  minPocket: "0.22.0",
   declares: {
     extensions: ["resource-queue"],
     tools: ["resource_queue_start"],

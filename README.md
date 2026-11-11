@@ -4,7 +4,7 @@ An MIT-licensed community extension for Pi Pocket. It monitors system capacity, 
 
 ## Requirements and installation
 
-Requires Pi Pocket **0.27.0 or newer** and extension API **2**. Linux provides the full process and I/O monitor. Other platforms omit unsupported metrics.
+Requires Pi Pocket **0.22.0 or newer** and extension API **2**. Linux provides the full process and I/O monitor. Other platforms omit unsupported metrics.
 
 Copy `resource-queue.ts` and the complete `resource-queue/` folder into Pi Pocket's data directory under `extensions/`. Enable **Resource queue** in **Menu → Extensions**. Never copy test files or repository development dependencies into the extension directory.
 
@@ -16,7 +16,7 @@ Open **Resource monitor** from the rail. Its dot shows green for ready, red for 
 - Shows top-3 processes for CPU, resident memory, and disk read/write throughput. Rates are approximate. Exited processes and inaccessible counters may be omitted.
 - Holds tool calls across sessions before execution while an enabled resource check fails. It never interrupts an already running process or model generation.
 - Exempts `resource_queue_start` so Pi can still enqueue work during resource pressure.
-- Rechecks resources before releasing work. Waiting tools and queued linked-session starts share a recovery admission limit: starts are at least 15 seconds apart, not necessarily non-overlapping.
+- Rechecks resources before releasing work. Waiting tools and queued linked-session starts share a recovery admission limit: starts use a configurable minimum spacing (default 15 seconds), and can overlap.
 - Shows chat notices and a persistent status-line indication for held tool calls. Stop cancels a waiting tool call.
 - Starts queued work through Pi Pocket's linked-session API. Queue items use durable tasks and idempotent enqueue receipts.
 - Provides `/resource-queue-status` to inspect this conversation's queue and outcomes, and `/resource-queue-cancel <id>` to cancel an item before its start is claimed. Stop does **not** cancel an already-enqueued background item. These commands require permission to steer the conversation.
@@ -25,13 +25,13 @@ The monitor page and its routes are owner-only. Session notices go only to tabs 
 
 ### Reloads and restarts
 
-The admission clock is transient scheduling state shared by overlapping reload generations through Node's cached helper module. A fresh process applies a full 15-second startup cooldown. Reload disposal aborts old hook waits rather than leaving invisible timers. Interrupted tool calls may need a retry. Durable queue tasks and receipts survive restart. Helper-code updates require a server restart, as Pi Pocket's gallery indicates.
+The admission clock is transient scheduling state shared by overlapping reload generations through Node's cached helper module. A fresh process applies the configured resume delay as its startup cooldown. Reload disposal aborts old hook waits rather than leaving invisible timers. Interrupted tool calls may need a retry. Durable queue tasks and receipts survive restart. Helper-code updates require a server restart, as Pi Pocket's gallery indicates.
 
-The 15-second rule applies to **admission times**, not linked-session completion times. A linked start already admitted before reload can finish afterward. Queue cancellation is accepted only while an item is `waiting`; it cannot undo a session whose start was already claimed.
+The configured resume delay applies to **admission times**, not linked-session completion times. A linked start already admitted before reload can finish afterward. Queue cancellation is accepted only while an item is `waiting`; it cannot undo a session whose start was already claimed.
 
 ## Settings
 
-Change settings in **Menu → Extensions → Resource queue**. Changes apply to later checks. Set a resource threshold to **0** to disable that check.
+Change settings in **Menu → Extensions → Resource queue**. Changes apply to later checks. Resume-delay changes are detected within about 1 second while capacity is available. They adjust the interval measured from the last admission (or startup), without resetting that reference time. Set a resource threshold to **0** to disable that check.
 
 | Setting                                         | Default | Range |
 | ----------------------------------------------- | ------: | ----: |
@@ -40,6 +40,7 @@ Change settings in **Menu → Extensions → Resource queue**. Changes apply to 
 | Maximum I/O wait (%)                            |      15 | 0–100 |
 | Minimum free data-disk space (%)                |      10 |  0–95 |
 | Resource-check interval while waiting (seconds) |      20 | 5–600 |
+| Delay between resumed starts (seconds)          |      15 | 1–600 |
 
 CPU load is an average, not instantaneous CPU utilization. It can remain high after activity decreases. Enabled, supported I/O and disk checks wait for their initial measurements after load or reload. If the OS cannot report a metric, the monitor marks it unavailable and does not block on that metric. Read failures also use this fail-open policy; this is a capacity aid, not a hard resource isolation boundary. Bad settings use defaults or clamp to their supported range.
 
@@ -61,7 +62,7 @@ The extension uses experimental Pi Pocket APIs: linked sessions, status-line ite
 
 ## Development
 
-Use Node 24 or a supported Node release with native TypeScript stripping. Install development dependencies with `npm ci`. A Pi Pocket v0.27.0 checkout with dependencies is required for integration tests and the `Host`/`Web` type definitions. Link `_pocket.d.ts` to that checkout's `types/pocket.d.ts`. Development package installs must never use a `node_modules` symlink into a running server. See `CLAUDE.md` for local setup.
+Use Node 24 or a supported Node release with native TypeScript stripping. Install development dependencies with `npm ci`. A Pi Pocket v0.22.0 or v0.27.0 checkout with dependencies is required for integration tests and the `Host`/`Web` type definitions. Link `_pocket.d.ts` to that checkout's `types/pocket.d.ts`. Development package installs must never use a `node_modules` symlink into a running server. See `CLAUDE.md` for local setup.
 
 Run cheap checks before integration tests:
 

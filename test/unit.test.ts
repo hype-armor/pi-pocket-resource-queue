@@ -116,6 +116,28 @@ test("gate spaces concurrent admissions and checks capacity", () => {
   assert.equal(gate.acquire(true), true);
 });
 
+test("resume spacing can change during startup and recovery", () => {
+  let now = 0;
+  const gate = createResumeGate(() => now);
+  gate.configure(3000);
+  now = 2999;
+  assert.equal(gate.acquire(true), false);
+  now = 3000;
+  assert.equal(gate.acquire(true), true);
+  gate.configure(10000);
+  now = 12000;
+  assert.equal(gate.acquire(true), false);
+  assert.equal(gate.remainingMs(), 1000);
+  gate.configure(1000);
+  assert.equal(gate.acquire(true), true);
+  now = 12999;
+  assert.equal(gate.acquire(true), false);
+  now = 13000;
+  assert.equal(gate.acquire(true), true);
+  for (const value of [0, -1000, NaN, Infinity, 601000])
+    assert.throws(() => gate.configure(value));
+});
+
 test("overlapping reload generations share their reservation", () => {
   let now = 0;
   const oldGate = createResumeGate(() => now, "reload-test");

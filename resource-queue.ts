@@ -1,4 +1,4 @@
-/** Monitor memory, CPU load, I/O wait, data-disk space, and top Linux processes. Pause tool calls across sessions and stagger waiting admissions by 15 seconds. Reads /proc/stat and per-process stat, status, and io counters; never command arguments. Uses the experimental linked-session, settings, and browser status APIs. No external network calls. */
+/** Monitor memory, CPU load, I/O wait, data-disk space, and top Linux processes. Pause tool calls across sessions and stagger waiting admissions with a configurable resume delay. Reads /proc/stat and per-process stat, status, and io counters; never command arguments. Uses the experimental linked-session, settings, and browser status APIs. No external network calls. */
 import { readFile, statfs } from "node:fs/promises";
 import { freemem, hostname, loadavg, totalmem, uptime, cpus } from "node:os";
 import { Type } from "@earendil-works/pi-ai";
@@ -26,6 +26,7 @@ const LIMITS = {
   maxIoWaitPercent: { fallback: 15, min: 0, max: 100 },
   minFreeDiskPercent: { fallback: 10, min: 0, max: 95 },
   pollSeconds: { fallback: 20, min: 5, max: 600 },
+  resumeSpacingSeconds: { fallback: 15, min: 1, max: 600 },
 } as const;
 
 type LimitName = keyof typeof LIMITS;
@@ -72,6 +73,7 @@ function config(web: Web): Limits {
     maxIoWaitPercent: read("maxIoWaitPercent"),
     minFreeDiskPercent: read("minFreeDiskPercent"),
     pollSeconds: read("pollSeconds"),
+    resumeSpacingSeconds: read("resumeSpacingSeconds"),
   };
 }
 
@@ -256,7 +258,9 @@ async function holdUntilReady(
     const ready = getStatus().ready;
     if (gate.acquire(ready)) return;
     await pause(
-      ready ? Math.max(1, gate.remainingMs()) : config(web).pollSeconds * 1000,
+      ready
+        ? Math.max(1, Math.min(1000, gate.remainingMs()))
+        : config(web).pollSeconds * 1000,
       signal,
     );
   }
@@ -290,7 +294,7 @@ function createPauseHook(
           .map((check) => check.reason);
         host.notice(
           "warning",
-          `⏸ Paused: ${reasons.join("; ") || "staggered resource recovery"}. Waiting work resumes one start at a time, at least 15 seconds apart. Stop cancels the wait.`,
+          `⏸ Paused: ${reasons.join("; ") || "staggered resource recovery"}. Waiting work resumes one start at a time, at least ${config(web).resumeSpacingSeconds} seconds apart. Stop cancels the wait.`,
           id,
         );
       }
@@ -308,7 +312,7 @@ function createPauseHook(
           host.notice(
             "info",
             resumed
-              ? "▶ Tool call released. Further waiting work starts at least 15 seconds apart."
+              ? `▶ Tool call released. Further waiting work starts at least ${config(web).resumeSpacingSeconds} seconds apart.`
               : "Resource wait cancelled.",
             id,
           );
@@ -384,7 +388,7 @@ function createQueueTask(
         // Reserve immediately before starting, not during the earlier phase transition.
         if (!gate.acquire(getStatus().ready)) {
           const delay = getStatus().ready
-            ? Math.max(1, gate.remainingMs())
+            ? Math.max(1, Math.min(1000, gate.remainingMs()))
             : config(web).pollSeconds * 1000;
           await runtime.sleepUntil(
             runtime.now() + delay,
@@ -536,7 +540,7 @@ function createQueueTool(
         output: [
           {
             type: "text" as const,
-            text: `Queue item ${taskId}. ${waitMessage(reading, config(web).pollSeconds)} Admissions are at least 15 seconds apart. Use /resource-queue-status to inspect it, or /resource-queue-cancel ${taskId} before it starts. Stop cancels held tools, not this background queue item.`,
+            text: `Queue item ${taskId}. ${waitMessage(reading, config(web).pollSeconds)} Admissions are at least ${config(web).resumeSpacingSeconds} seconds apart. Use /resource-queue-status to inspect it, or /resource-queue-cancel ${taskId} before it starts. Stop cancels held tools, not this background queue item.`,
           },
         ],
       };
@@ -635,6 +639,16 @@ export default function createResourceQueue(host: Host, web: Web) {
         max: LIMITS.minFreeDiskPercent.max,
       },
       {
+        name: "resumeSpacingSeconds",
+        label: "Delay between resumed starts (seconds)",
+        description:
+          "Minimum spacing shared by waiting tool calls and queued session starts. Also sets the startup cooldown.",
+        type: "number",
+        default: LIMITS.resumeSpacingSeconds.fallback,
+        min: LIMITS.resumeSpacingSeconds.min,
+        max: LIMITS.resumeSpacingSeconds.max,
+      },
+      {
         name: "pollSeconds",
         label: "Check interval while waiting (seconds)",
         description:
@@ -657,6 +671,7 @@ export default function createResourceQueue(host: Host, web: Web) {
   // Transient state for live hook executions only. Restarted calls register again.
   const waiting = new Map<number, number>();
   const resumeGate = createResumeGate(undefined, host.dataDir);
+  resumeGate.configure(config(web).resumeSpacingSeconds * 1000);
   const lifetime = new AbortController();
   web.onDispose(() =>
     lifetime.abort(
@@ -672,15 +687,18 @@ export default function createResourceQueue(host: Host, web: Web) {
     io: [],
     ioReadable: false,
   };
-  const getStatus = () => ({
-    ...status(web, sampled),
-    processes,
-    resumeDelaySeconds: Math.ceil(resumeGate.remainingMs() / 1000),
-    waiting: Array.from(waiting, ([conversationId, count]) => ({
-      conversationId,
-      count,
-    })),
-  });
+  const getStatus = () => {
+    resumeGate.configure(config(web).resumeSpacingSeconds * 1000);
+    return {
+      ...status(web, sampled),
+      processes,
+      resumeDelaySeconds: Math.ceil(resumeGate.remainingMs() / 1000),
+      waiting: Array.from(waiting, ([conversationId, count]) => ({
+        conversationId,
+        count,
+      })),
+    };
+  };
   const publish = () => web.send("status", getStatus());
 
   web.route("GET", "status", getStatus);

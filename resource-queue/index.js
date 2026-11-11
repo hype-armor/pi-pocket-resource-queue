@@ -414,7 +414,8 @@ export default function setup(pocket) {
           <strong>Menu → Extensions → Resource queue</strong>. A limit of 0
           turns its check off. Waiting tool calls check resources every
           ${limits.pollSeconds} seconds. Waiting tools and queued sessions share
-          one recovery slot: starts are at least 15 seconds apart.
+          one recovery slot: starts are at least
+          ${limits.resumeSpacingSeconds ?? 15} seconds apart.
         </p>
       </footer>
       ${error ? html`<div class="error-box">${error}</div>` : null}
@@ -451,11 +452,12 @@ export default function setup(pocket) {
           .filter((item) => item.enabled && !item.ok)
           .map((item) => item.reason);
         const why =
-          reasons.join("; ") || "staggered recovery (one start every 15s)";
+          reasons.join("; ") ||
+          `staggered recovery (one start every ${reading.limits.resumeSpacingSeconds ?? 15}s)`;
         return {
           text: `⏸ PAUSED — ${why}`,
           short: "⏸ PAUSED: resources",
-          title: `${paused.count} tool call(s) waiting: ${why}. Resource checks every ${reading.limits.pollSeconds}s. Starts are at least 15s apart; next slot in about ${reading.resumeDelaySeconds ?? 0}s. Resumes automatically; Stop cancels. Tap to open the resource monitor.`,
+          title: `${paused.count} tool call(s) waiting: ${why}. Resource checks every ${reading.limits.pollSeconds}s. Starts are at least ${reading.limits.resumeSpacingSeconds ?? 15}s apart; next slot in about ${reading.resumeDelaySeconds ?? 0}s. Resumes automatically; Stop cancels. Tap to open the resource monitor.`,
           tone: "warn",
         };
       }
@@ -496,7 +498,7 @@ export default function setup(pocket) {
         .map((check) => check.reason);
       rail.update({
         badge: null,
-        title: `Resource monitor — ${state}${reasons.length ? `: ${reasons.join("; ")}` : recovering ? ": waiting starts are spaced 15 seconds apart" : ": capacity available"}`,
+        title: `Resource monitor — ${state}${reasons.length ? `: ${reasons.join("; ")}` : recovering ? `: waiting starts are spaced ${reading.limits?.resumeSpacingSeconds ?? 15} seconds apart` : ": capacity available"}`,
       });
     };
     pocket

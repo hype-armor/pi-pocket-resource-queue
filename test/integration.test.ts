@@ -23,7 +23,7 @@ const {
   cleanUp,
   context,
   lastText,
-  loadTools,
+  loadTools: loadToolsHelper,
   modelTexts,
   newSession,
   openApp,
@@ -58,9 +58,20 @@ const disabledLimits = {
   maxIoWaitPercent: 0,
   minFreeDiskPercent: 0,
   pollSeconds: 5,
+  resumeSpacingSeconds: 15,
 };
 
 after(cleanUp);
+
+// Pi Pocket 0.22 loads session tools eagerly. Newer test helpers expose loadTools.
+async function loadTools(app: App, sessionId: string, toolName: string) {
+  if (typeof loadToolsHelper === "function") {
+    await loadToolsHelper(app, sessionId, toolName);
+    return;
+  }
+  // The 0.22 harness has no tool-loading helper. It loads tools eagerly at runtime.
+  assert.ok(app.harness.conversation);
+}
 
 /** Copy the supplied layout without repairs or links to live data. */
 async function fixture(
@@ -319,6 +330,23 @@ test(
       1,
       "A normal tool call must not create a linked session.",
     );
+  },
+);
+
+test(
+  "settings updates change resume spacing in limits and countdown",
+  { timeout: 20000 },
+  async (t) => {
+    const { app } = await fixture(t);
+    await enable(app);
+    app.setExtensionSettings(owner(app), "resource-queue", {
+      ...disabledLimits,
+      resumeSpacingSeconds: 7,
+    });
+    const call = await http(t, app);
+    const updated = (await call()).data;
+    assert.equal(updated.limits.resumeSpacingSeconds, 7);
+    assert.equal(updated.resumeDelaySeconds, 7);
   },
 );
 
